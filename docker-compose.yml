@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:17
+    container_name: cruise_postgres
+    environment:
+      POSTGRES_DB: dqd_db_local          # Updated database name
+      POSTGRES_USER: dqd_db_local         # Updated username
+      POSTGRES_PASSWORD: dqd_db_local      # Updated password
+    ports:
+      - "5435:5432"  # Host port 5435 mapped to container port 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # Named volume for PostgreSQL data persistence
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dqd_db_local -d dqd_db_local"]  # Updated check
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+
+  # 2. LocalStack for S3 mocking
+  localstack:
+    image: localstack/localstack:latest
+    container_name: dqd_localstack
+    environment:
+      SERVICES: s3
+      AWS_ACCESS_KEY_ID: dqd_db_local_key          # Updated access key
+      AWS_SECRET_ACCESS_KEY: dqd_db_local_secret    # Updated secret key
+    ports:
+      - "4566:4566"  # LocalStack's endpoint for services
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health || exit 1"]
+      interval: 10s  # Check every 10 seconds
+      timeout: 5s
+      retries: 10
+      start_period: 30s  # Allow LocalStack time to start
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: on-failure
+
+  # 3. Backend app (API Service)
+  backend:
+    build:
+      context: ./api_service  # Assume your backend Dockerfile is here
+      dockerfile: Dockerfile
+    container_name: cruise_backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dqd_db_local  # Updated DB connection
+      SPRING_DATASOURCE_USERNAME: dqd_db_local        # Updated username
+      SPRING_DATASOURCE_PASSWORD: dqd_db_local        # Updated password
+      SERVER_PORT: 8081
+      AWS_COGNITO_SERVER_JWK_URI: placeholder
+      # Add other environment variables as needed
+    ports:
+      - "8081:8081"  # Expose the backend API on port 8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # 4. ETL app
+  etl:
+    build:
+      context: ./etl  # Assume your ETL Dockerfile is in a separate directory
+      dockerfile: Dockerfile
+    container_name: cruise_etl
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dqd_db_local  # Updated DB connection
+      SPRING_DATASOURCE_USERNAME: dqd_db_local        # Updated username
+      SPRING_DATASOURCE_PASSWORD: dqd_db_local        # Updated password
+      SERVER_PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: dqd_db_local  # Updated database name
+      DB_USER: dqd_db_local        # Updated username
+      DB_PASSWORD: dqd_db_local    # Updated password
+      SERVICE_AUTH_TOKEN: local-auth-token
+      # AWS configs
+      AWS_ACCESS_KEY_ID: dqd_db_local_key          # Updated access key
+      AWS_SECRET_ACCESS_KEY: dqd_db_local_secret    # Updated secret key
+      AWS_REGION: eu-central-1
+      AWS_ENDPOINT_URL: http://localstack:4566  # Pointing to LocalStack for S3
+    ports:
+      - "8082:8082"  # Expose ETL application on port 8082
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    restart: on-failure
+
+
+  # 5. S3 Seeder: Create bucket and upload files to Localstack dynamically
+  s3-seeder:
+    image: amazon/aws-cli:latest
+    container_name: dqd_seeder
+    environment:
+      AWS_ACCESS_KEY_ID: dqd-local-key
+      AWS_SECRET_ACCESS_KEY: dqd-secret
+      AWS_REGION: eu-central-1
+      AWS_ENDPOINT_URL: http://localstack:4566
+    volumes:
+      - ./data:/data
+      - ./scripts/seed_s3.sh:/seed_s3.sh
+    depends_on:
+      localstack:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", "chmod +x /seed_s3.sh && /seed_s3.sh"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  localstack_data:

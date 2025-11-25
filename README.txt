@@ -25,6 +25,7 @@ Service     Service       Service
        Data Quality Service
                |
          Data Warehouse
+
 2. Data Flow Design
 Data Flow Summary:
 1.	Ingestion: Data from sources (APIs, databases, files) is ingested through the Ingestion Service.
@@ -33,7 +34,8 @@ Data Flow Summary:
 4.	Anomaly Detection: Processed data is analyzed to detect anomalies and generate alerts.
 5.	Storage: Cleaned and validated data is loaded into a data warehouse.
 6.	Dashboards/Reports: The visualization tool accesses the stored data for analytics, generating insights and alerts for users.
-Tech Stack Overview
+
+3.Tech Stack Overview
 •	Backend:
 o	PySpark: Core processing engine for big data processing and analytics.
 o	Delta Lake: Storage layer that adds ACID transactions to Apache Spark and big data workloads.
@@ -45,6 +47,7 @@ o	Amazon S3: For storing data files and artifacts.
 o	Docker: For containerizing applications to ensure consistent environments from development to production.
 o	GitHub Actions: For implementing CI/CD workflows to automate testing, deployment, and build processes.
 •	Cloud Provider: AWS, Azure, or Google Cloud for hosting and managing services.
+
 4. Multi-Tenancy Design
 Approach for Multi-Tenancy:
 •	Database Schema: Use a shared database with a single schema, segmented by tenant IDs to maintain data isolation. Each data record has a tenant identifier that allows for multi-tenancy without duplicating infrastructure.

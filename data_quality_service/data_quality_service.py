@@ -13,18 +13,48 @@ class DataQualityService:
     def __init__(self):
         self.rules = QualityRules()
 
-    def assess_data_quality(self, file_path: str) -> DataQualityMetrics:
-
-        data_frame = self.load_data(file_path)
+    def assess_data_quality(self, df: pd.DataFrame) -> DataQualityMetrics:
 
         quality_metrics = DataQualityMetrics()
-        quality_metrics.completeness = self.rules.check_completeness(data_frame)
-        quality_metrics.accuracy = self.rules.check_accuracy(data_frame)
-        quality_metrics.consistency = self.rules.check_consistency(data_frame)
-        quality_metrics.validity = self.rules.check_validity(data_frame)
-        quality_metrics.duplicates = self.rules.check_duplicates(data_frame)
+        quality_metrics.completeness = self.rules.check_completeness(df)
+        quality_metrics.accuracy = self.rules.check_accuracy(df)
+        quality_metrics.consistency = self.rules.check_consistency(df)
+        quality_metrics.validity = self.rules.check_validity(df)
+        quality_metrics.duplicates = self.rules.check_duplicates(df)
+
+        # Check for expected columns and data types if needed
+        expected_columns = ['id', 'email', 'date']  # Define expected columns
+        quality_metrics.column_presence = self.rules.check_column_presence(df, expected_columns)
+
+        expected_types = {
+            'id': pd.Int64Dtype(),
+            'email': pd.StringDtype(),
+            'date': pd.Timestamp
+        }
+        quality_metrics.data_types = self.rules.check_data_types(df, expected_types)
 
         return quality_metrics
+
+    def detect_anomalies(self, df: pd.DataFrame) -> dict:
+        """
+        Detect anomalies in the given DataFrame.
+
+        :param df: Pandas DataFrame containing the data to analyze for anomalies.
+        :return: A dictionary of detected anomalies.
+        """
+        anomalies = {}
+
+        if 'amount' in df.columns:
+            q1 = df['amount'].quantile(0.25)
+            q3 = df['amount'].quantile(0.75)
+            iqr = q3 - q1
+            lower_bound = q1 - 1.5 * iqr
+            upper_bound = q3 + 1.5 * iqr
+
+            outliers = df[(df['amount'] < lower_bound) | (df['amount'] > upper_bound)]
+            anomalies['outliers'] = outliers
+
+        return anomalies
 
     def load_data(self, file_path: str) -> pd.DataFrame:
 

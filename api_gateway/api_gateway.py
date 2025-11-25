@@ -1,4 +1,6 @@
 from flask import Flask, jsonify, request
+
+from data_quality_service.data_quality_service import DataQualityService
 from ingestion_service import IngestionService
 from migration_service import MigrationService
 
@@ -58,9 +60,26 @@ def migrate_data():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/data-quality', methods=['GET'])
+quality_service = DataQualityService()
+
+
+@app.route('/data-quality', methods=['POST'])
 def check_data_quality():
-    return jsonify({"message": "Data quality check initiated"}), 202
+    data = request.get_json()
+    file_path = data.get("file_path")
+
+    if not file_path:
+        return jsonify({"error": "File path is required"}), 400
+
+    try:
+        # Load the data
+        df = ingestion_service.load_data(file_path)
+        # Assess the data quality
+        quality_metrics = quality_service.assess_data_quality(df)
+
+        return jsonify({"data_quality_metrics": quality_metrics.__dict__}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}),
 
 
 @app.route('/anomalies', methods=['GET'])
